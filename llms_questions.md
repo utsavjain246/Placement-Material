@@ -4,66 +4,66 @@
 
 **Answer:**
 
-*   **Pre-training (The Generalist):**
-    
-    *   **Goal:** Learn the statistical structure of language and general world knowledge.
-        
-    *   **Data:** Massive, unlabeled datasets (The Internet, books, Wikipedia).
-        
-    *   **Objective:** "Next Token Prediction" (predicting the next word given the previous words). It is self-supervised (the data acts as its own label).
-        
-*   **Fine-tuning (The Specialist):**
-    
-    *   **Goal:** Adapt the model to a specific task (e.g., following instructions, coding, medical diagnosis) or style.
-        
-    *   **Data:** Smaller, high-quality, labeled datasets (Instruction-Response pairs).
-        
-    *   **Objective:** Still often Next Token Prediction, but calculated only on the _response_ part of the data to guide the model toward specific _behaviors_ rather than just general knowledge.
-        
+- **Pre-training (The Generalist)**  
+  - **Goal:** Learn broad statistical structure of language and general world knowledge so the model can produce coherent text in many contexts.  
+  - **Data:** Very large, mostly unlabeled corpora (web pages, books, Wikipedia, etc.).  
+  - **Objective:** Self-supervised objectives such as Next Token Prediction (autoregressive) or Masked Token Prediction (masked language models). The model learns to predict tokens from surrounding context; the data itself provides the supervision.
 
-**Follow-up:**
+- **Fine-tuning (The Specialist)**  
+  - **Goal:** Adapt the pretrained model to a specific task, behavior, or domain (e.g., instruction following, classification, code generation, or a specialized domain like medicine).  
+  - **Data:** Smaller, curated, labeled datasets or instruction–response pairs. Data quality and alignment with the target task are more important than sheer size.  
+  - **Objective:** Often still framed as token-level prediction (e.g., maximize likelihood of desired responses), but computed on task-specific examples so the model learns the required behavior, format, or constraints.
 
-> "Does Fine-tuning add new knowledge to the model?"
-> 
-> **Answer:** Generally, no. Fine-tuning is better at teaching the model a _format_ or a _style_ rather than new facts. If you fine-tune a model on a new physics theory it hasn't seen, it might hallucinate. New knowledge is best added via RAG (Retrieval Augmented Generation) or Pre-training.
+Follow-up — "Does fine-tuning add new knowledge to the model?"  
+- Short answer: Not usually in the same way as human learning of new facts. Fine-tuning primarily changes the model's behavior, style, and how it weighs existing internal representations. If the fine-tuning data contains factual information the base model never saw, the model can incorporate those facts into its outputs, but this is often limited by the model's capacity and may be less robust than learning via large-scale pretraining. Fine-tuning can also cause the model to overfit to the new data or forget (partially) some previously learned behaviors if not done carefully (techniques such as regularization or adapters help mitigate that).
 
-----------------------------
+---
 
+### Inference: Temperature & Sampling
 
-### 5\. Inference: Temperature & Sampling
+**Question:** When generating text, we often adjust a parameter called **Temperature**. How does Temperature mathematically affect the output, and why does a higher temperature make the model more "creative" or random?
 
-**Question:** When generating text, we often adjust a parameter called **Temperature**. **How does Temperature mathematically affect the output, and why does a higher temperature make the model more 'creative'?**
+**Answer:**
 
-**Answer:** LLMs output a probability distribution over the entire vocabulary (e.g., "apple": 10%, "banana": 5%, "car": 0.01%).
+- LLMs produce a vector of raw scores (logits) for each token; a Softmax converts logits into probabilities:
+  - `p_i = exp(z_i) / sum_j exp(z_j)` where `z_i` is the logit for token i.
+- Temperature `T` rescales logits before Softmax:
+  - `p_i = exp(z_i / T) / sum_j exp(z_j / T)`.
+  - If `T < 1`, logits are scaled up, making the distribution peakier (more concentrated on top tokens) → more deterministic outputs.
+  - If `T > 1`, logits are scaled down, flattening the distribution → lower-probability tokens get relatively more probability mass → more diverse/random outputs.
+  - `T = 1` is the default (no scaling).
 
--   **The Mechanism:** Temperature is a divisor applied to the "logits" (raw scores) before they enter the Softmax function.
+- Intuition: Temperature affects certainty. Low T amplifies confident choices; high T increases uncertainty so rarer tokens are sampled more often, which can produce novel or surprising continuations.
 
--   **Low Temperature (<1.0):** Exaggerates the differences. High probabilities get even higher; low ones get lower. The model becomes conservative and deterministic, almost always picking the #1 most likely word.
+Follow-up — "What is the difference between Temperature and 'Top-K' (and 'Top-p') sampling?"  
+- **Temperature** changes the shape of the whole probability distribution (soft adjustment).  
+- **Top-K** sampling truncates the distribution to only the K most probable tokens, renormalizes their probabilities, and samples from that set (hard cutoff). This prevents very unlikely tokens from ever being chosen.  
+- **Top-p (nucleus)** sampling chooses the smallest set of top tokens whose cumulative probability ≥ p, then samples from that set. This adapts the cutoff dynamically based on the distribution's entropy.  
+- Common practice: combine temperature with Top-K or Top-p for better control (temperature for global randomness; Top-K/Top-p to remove extremely unlikely tokens).
 
--   **High Temperature (>1.0):** Flattens the curve. The difference between the #1 word and the #10 word shrinks. This gives the less likely (but potentially more interesting) words a fighting chance to be picked, resulting in "creativity" or randomness.
+---
 
-**Follow-up:**
+### Challenges: Hallucinations
 
-> "What is the difference between Temperature and 'Top-K' sampling?"
->
-> **Answer:** Temperature changes the *shape* of the probability curve. Top-K simply *cuts off* the tail. Top-K says, "Only consider the top K most likely words, and zero out the rest." Top-K prevents the model from choosing complete nonsense (very low probability tokens), whereas high temperature simply makes everything equally likely.
+**Question:** LLMs are known to "hallucinate" (make things up). Based on how they are trained, why is hallucination a feature, not a bug?
 
-----------------------------
+**Answer:**
 
-### 6\. Challenges: Hallucinations
+- Objective mismatch: Models are trained to maximize the likelihood of the next token (produce plausible continuations) rather than to maximize factual accuracy. The training objective rewards fluency and plausibility, not truth.
+- Pattern completion: Given a prompt, the model completes patterns seen during training. If asked for a fact it doesn't know, it will generate a plausible-sounding answer based on correlated patterns (names, dates, citation formats), not a validated fact.
+- No built-in verification: Standard LLM inference is a single-pass generation without an external truth-check; the model has no direct access to a canonical source to confirm facts.
+- Data noise and bias: Training data contains errors, fictional text, and biases; models can reproduce those.
 
-**Question:** LLMs are known to "hallucinate" (make things up). **Based on how they are trained, why is hallucination a feature, not a bug?**
+Follow-up — "How can we reduce hallucinations without retraining the model?"
 
-**Answer:** LLMs are probabilistic engines, not truth databases.
+- Retrieval-Augmented Generation (RAG): Retrieve relevant documents from an external corpus and provide them in the prompt context. Grounding outputs in retrieved facts greatly reduces hallucinations.  
+- Tooling / external APIs: Use search engines, knowledge bases, or fact-checking APIs at runtime to verify or supply facts.  
+- Prompting strategies: Ask the model to cite sources, be explicit about uncertainty, or return "I don't know" when unsure. Use chain-of-thought or step-by-step reasoning carefully together with verification.  
+- Post-processing: Validate model outputs with rule-based checks, SQL/schema validation, or external verification steps; redact or flag unsupported claims.  
+- Constrained decoding: Force outputs into templates or limited vocabularies where possible (e.g., canonical identifiers).  
+- Ensembles and calibration: Compare multiple independent generations or use calibration techniques to detect low-confidence outputs.  
+- Human-in-the-loop: Have humans verify critical outputs before use, especially in high-stakes domains.
 
--   They are trained to generate the most **plausible** next token, not the **truthful** one.
+Notes: These mitigations reduce but do not eliminate hallucinations. For mission-critical or safety-sensitive applications, always combine grounding, automatic checks, and human oversight.
 
--   If you ask for a citation for a fake physics paper, the model looks at the pattern of academic citations. It knows citations usually contain names, a year, and a title. It generates a sequence that *looks* exactly like a citation (plausible syntax) but refers to a paper that doesn't exist (factually void).
-
--   The model prioritizes **fluency and coherence** over factual accuracy because that is what the "Next Token Prediction" objective optimizes for.
-
-**Follow-up:**
-
-> "How can we reduce hallucinations without retraining the model?"
->
-> **Answer:** The most common method is **RAG (Retrieval-Augmented Generation)**. Instead of asking the model to rely on its internal memory, you provide the relevant facts in the prompt context and ask the model to "answer only using the provided context."
+---
